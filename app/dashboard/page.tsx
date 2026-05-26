@@ -165,23 +165,27 @@ export default function Dashboard() {
   }
 
   const saveAcc = async () => {
-    if (!userId) return
-    const data = { platform: aPlatform, name: aName||'未命名账号', handle: aHandle, user_id: userId }
-    if (editAccId) {
-      await supabase.from('accounts').update(data).eq('id', editAccId)
-      toast('账号已更新 ✓')
-    } else {
-      await supabase.from('accounts').insert(data)
-      toast('账号已添加 ✓')
-    }
-    await loadData(userId); setAccModal(false)
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) { toast('请重新登录'); return }
+  
+  const data = { 
+    platform: aPlatform, 
+    name: aName||'未命名账号', 
+    handle: aHandle, 
+    user_id: session.user.id 
   }
-
-  const deleteAcc = async () => {
-    if (!confirm('确定删除此账号？') || !userId) return
-    await supabase.from('accounts').delete().eq('id', editAccId!)
-    toast('已删除'); await loadData(userId); setAccModal(false)
+  
+  if (editAccId) {
+    const { error } = await supabase.from('accounts').update(data).eq('id', editAccId)
+    if (error) { toast('错误: ' + error.message); return }
+    toast('账号已更新 ✓')
+  } else {
+    const { error } = await supabase.from('accounts').insert(data)
+    if (error) { toast('错误: ' + error.message); return }
+    toast('账号已添加 ✓')
   }
+  await loadData(session.user.id); setAccModal(false)
+}
 
   // ---- TELEGRAM ----
   const saveTg = () => {
