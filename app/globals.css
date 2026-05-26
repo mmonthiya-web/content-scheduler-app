@@ -205,7 +205,6 @@ input,textarea,select{font-family:'DM Sans',sans-serif;}
   .content{padding:1rem;}
   .draft-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
   .cal-day{min-height:52px;}
-  .cal-chip{display:none;}
   .stat-grid{grid-template-columns:repeat(2,1fr);}
   .acc-grid{grid-template-columns:1fr;}
   .datetime-row{grid-template-columns:1fr;}
