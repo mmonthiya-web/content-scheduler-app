@@ -55,7 +55,18 @@ export default function Dashboard() {
   const [aPlatform, setAPlatform] = useState<Platform>('ig')
   const [aName, setAName] = useState('')
   const [aHandle, setAHandle] = useState('')
+const [darkMode, setDarkMode] = useState<boolean>(() => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('darkMode')
+    return saved ? saved === 'true' : window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  return false
+})
 
+useEffect(() => {
+  document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+  localStorage.setItem('darkMode', String(darkMode))
+}, [darkMode])
   const toast = (msg: string) => {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(''), 2200)
@@ -278,6 +289,7 @@ export default function Dashboard() {
         <button className="nav-item" onClick={()=>{setTgResult('');setTgModal(true);setSidebarOpen(false)}}><i className="ti ti-brand-telegram"></i> Telegram 提醒</button>
         <div className="sidebar-bottom">
           <div style={{fontSize:'11px',color:'var(--text3)',marginBottom:'6px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{userEmail}</div>
+         <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center',marginBottom:'6px'}} onClick={()=>setDarkMode(!darkMode)}><i className={`ti ti-${darkMode?'sun':'moon'}`}></i> {darkMode?'日间模式':'夜间模式'}</button>
           <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={signOut}><i className="ti ti-logout"></i> 登出</button>
         </div>
       </nav>
