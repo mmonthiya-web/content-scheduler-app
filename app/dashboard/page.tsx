@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
@@ -20,7 +20,7 @@ const XHS_MAX = 1000, IG_MAX = 2200
 
 export default function Dashboard() {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [userId, setUserId] = useState<string|null>(null)
   const [userEmail, setUserEmail] = useState<string>('')
   const [posts, setPosts] = useState<Post[]>([])
@@ -32,7 +32,6 @@ export default function Dashboard() {
   const [calMonth, setCalMonth] = useState(new Date())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [toastMsg, setToastMsg] = useState('')
-  // Modal states
   const [postModal, setPostModal] = useState(false)
   const [editId, setEditId] = useState<string|null>(null)
   const [detailModal, setDetailModal] = useState(false)
@@ -43,7 +42,6 @@ export default function Dashboard() {
   const [tgToken, setTgToken] = useState('')
   const [tgChatId, setTgChatId] = useState('')
   const [tgResult, setTgResult] = useState('')
-  // Post form
   const [fTitle, setFTitle] = useState('')
   const [fCopy, setFCopy] = useState('')
   const [fTags, setFTags] = useState('')
@@ -54,7 +52,6 @@ export default function Dashboard() {
   const [fMin, setFMin] = useState('00')
   const [fReminder, setFReminder] = useState(false)
   const [fImg, setFImg] = useState<string>('')
-  // Acc form
   const [aPlatform, setAPlatform] = useState<Platform>('ig')
   const [aName, setAName] = useState('')
   const [aHandle, setAHandle] = useState('')
@@ -71,7 +68,6 @@ export default function Dashboard() {
     ])
     if (p) setPosts(p)
     if (a) setAccounts(a)
-    // load tg settings from localStorage (per user)
     const saved = localStorage.getItem(`tg_${uid}`)
     if (saved) { const t = JSON.parse(saved); setTgToken(t.token||''); setTgChatId(t.chatId||'') }
     setLoading(false)
@@ -93,7 +89,6 @@ export default function Dashboard() {
     router.replace('/auth')
   }
 
-  // ---- POSTS ----
   const fmtTime = (t: string | null) => {
     if (!t) return ''
     const d = new Date(t)
@@ -121,29 +116,34 @@ export default function Dashboard() {
   }
 
   const savePost = async () => {
-    if (!userId) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { toast('请重新登录'); return }
     const scheduled_at = fDate && fHour ? `${fDate}T${fHour}:${fMin}:00` : null
     const data = {
       emoji: EMOJIS[Math.floor(Math.random()*EMOJIS.length)],
       img_url: fImg, title: fTitle||'无标题草稿', copy: fCopy, tags: fTags,
       platforms: fPlatforms, account_ids: fAccounts,
-      scheduled_at, status: scheduled_at ? 'scheduled' : 'draft' as Status,
-      reminder: fReminder, user_id: userId,
+      scheduled_at, status: (scheduled_at ? 'scheduled' : 'draft') as Status,
+      reminder: fReminder, user_id: session.user.id,
     }
     if (editId) {
       const { error } = await supabase.from('posts').update(data).eq('id', editId)
-      if (!error) { toast('草稿已更新 ✓'); await loadData(userId) }
+      if (error) { toast('错误: ' + error.message); return }
+      toast('草稿已更新 ✓')
     } else {
       const { error } = await supabase.from('posts').insert(data)
-      if (!error) { toast('草稿已保存 ✓'); await loadData(userId) }
+      if (error) { toast('错误: ' + error.message); return }
+      toast('草稿已保存 ✓')
     }
-    setPostModal(false)
+    await loadData(session.user.id); setPostModal(false)
   }
 
   const deletePost = async (id: string) => {
-    if (!confirm('确定删除？') || !userId) return
+    if (!confirm('确定删除？')) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
     await supabase.from('posts').delete().eq('id', id)
-    toast('已删除'); await loadData(userId)
+    toast('已删除'); await loadData(session.user.id)
     setDetailModal(false); setPostModal(false)
   }
 
@@ -154,7 +154,6 @@ export default function Dashboard() {
     reader.readAsDataURL(file)
   }
 
-  // ---- ACCOUNTS ----
   const openAccModal = (id?: string) => {
     setEditAccId(id || null)
     if (id) {
@@ -165,29 +164,29 @@ export default function Dashboard() {
   }
 
   const saveAcc = async () => {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) { toast('请重新登录'); return }
-  
-  const data = { 
-    platform: aPlatform, 
-    name: aName||'未命名账号', 
-    handle: aHandle, 
-    user_id: session.user.id 
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { toast('请重新登录'); return }
+    const data = { platform: aPlatform, name: aName||'未命名账号', handle: aHandle, user_id: session.user.id }
+    if (editAccId) {
+      const { error } = await supabase.from('accounts').update(data).eq('id', editAccId)
+      if (error) { toast('错误: ' + error.message); return }
+      toast('账号已更新 ✓')
+    } else {
+      const { error } = await supabase.from('accounts').insert(data)
+      if (error) { toast('错误: ' + error.message); return }
+      toast('账号已添加 ✓')
+    }
+    await loadData(session.user.id); setAccModal(false)
   }
-  
-  if (editAccId) {
-    const { error } = await supabase.from('accounts').update(data).eq('id', editAccId)
-    if (error) { toast('错误: ' + error.message); return }
-    toast('账号已更新 ✓')
-  } else {
-    const { error } = await supabase.from('accounts').insert(data)
-    if (error) { toast('错误: ' + error.message); return }
-    toast('账号已添加 ✓')
-  }
-  await loadData(session.user.id); setAccModal(false)
-}
 
-  // ---- TELEGRAM ----
+  const deleteAcc = async () => {
+    if (!confirm('确定删除此账号？')) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await supabase.from('accounts').delete().eq('id', editAccId!)
+    toast('已删除'); await loadData(session.user.id); setAccModal(false)
+  }
+
   const saveTg = () => {
     if (!userId) return
     localStorage.setItem(`tg_${userId}`, JSON.stringify({ token: tgToken, chatId: tgChatId }))
@@ -205,7 +204,6 @@ export default function Dashboard() {
     } catch { setTgResult('✗ 发送失败') }
   }
 
-  // ---- FILTERS ----
   const filteredPosts = posts.filter(p => {
     if (draftFilter === 'draft') return p.status === 'draft'
     if (draftFilter === 'scheduled') return p.status === 'scheduled'
@@ -222,7 +220,6 @@ export default function Dashboard() {
     return true
   }).sort((a,b) => new Date(b.scheduled_at||b.created_at).getTime() - new Date(a.scheduled_at||a.created_at).getTime())
 
-  // ---- CALENDAR ----
   const calYear = calMonth.getFullYear(), calMon = calMonth.getMonth()
   const scheduledPosts = posts.filter(p => p.scheduled_at && p.status === 'scheduled')
   const calDays = () => {
@@ -251,7 +248,6 @@ export default function Dashboard() {
     return cells
   }
 
-  // ---- STAT helpers ----
   const thisMonthPublished = posts.filter(p => {
     if (p.status !== 'published') return false
     const d = new Date(p.scheduled_at || p.created_at)
@@ -268,7 +264,6 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
-      {/* Sidebar */}
       <nav className={`sidebar${sidebarOpen?' open':''}`}>
         <div className="sidebar-logo">
           <h1>📅 内容排期</h1>
@@ -279,7 +274,7 @@ export default function Dashboard() {
         <button className={`nav-item${page==='history'?' active':''}`} onClick={()=>{setPage('history');setSidebarOpen(false)}}><i className="ti ti-clock-hour-4"></i> 发布记录</button>
         <div className="nav-section">设置</div>
         <button className={`nav-item${page==='accounts'?' active':''}`} onClick={()=>{setPage('accounts');setSidebarOpen(false)}}><i className="ti ti-users"></i> 账号管理</button>
-        <button className="nav-item" onClick={()=>{setTgToken(localStorage.getItem(`tg_${userId}`) ? JSON.parse(localStorage.getItem(`tg_${userId}`)!).token||'' : ''); setTgChatId(localStorage.getItem(`tg_${userId}`) ? JSON.parse(localStorage.getItem(`tg_${userId}`)!).chatId||'' : ''); setTgResult(''); setTgModal(true); setSidebarOpen(false)}}><i className="ti ti-brand-telegram"></i> Telegram 提醒</button>
+        <button className="nav-item" onClick={()=>{setTgResult('');setTgModal(true);setSidebarOpen(false)}}><i className="ti ti-brand-telegram"></i> Telegram 提醒</button>
         <div className="sidebar-bottom">
           <div style={{fontSize:'11px',color:'var(--text3)',marginBottom:'6px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{userEmail}</div>
           <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={signOut}><i className="ti ti-logout"></i> 登出</button>
@@ -289,7 +284,6 @@ export default function Dashboard() {
       <div className="overlay" style={{display:sidebarOpen?'block':'none'}} onClick={()=>setSidebarOpen(false)}></div>
 
       <div className="main">
-        {/* Topbar */}
         <div className="topbar">
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <button className="hamburger" onClick={()=>setSidebarOpen(!sidebarOpen)}><i className="ti ti-menu-2"></i></button>
@@ -301,8 +295,6 @@ export default function Dashboard() {
         </div>
 
         <div className="content">
-
-          {/* DRAFTS */}
           {page === 'drafts' && (
             <>
               <div className="stat-grid">
@@ -313,7 +305,7 @@ export default function Dashboard() {
               </div>
               <div className="filter-tabs">
                 {[['all','全部'],['draft','草稿'],['scheduled','已排期'],['ig','Instagram'],['xhs','小红书']].map(([f,l])=>(
-                  <button key={f} className={`filter-tab${draftFilter===f?' active'+(f==='ig'?'-ig':f==='xhs'?'-xhs':''):''}`} onClick={()=>setDraftFilter(f)}>{l}</button>
+                  <button key={f} className={`filter-tab${draftFilter===f?(' active'+(f==='ig'?'-ig':f==='xhs'?'-xhs':'')):''}`} onClick={()=>setDraftFilter(f)}>{l}</button>
                 ))}
               </div>
               <div className="draft-grid">
@@ -348,7 +340,6 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* CALENDAR */}
           {page === 'calendar' && (
             <>
               <div className="stat-grid">
@@ -368,12 +359,11 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* HISTORY */}
           {page === 'history' && (
             <>
               <div className="filter-tabs">
                 {[['all','全部'],['published','已发布'],['scheduled','待发布'],['ig','Instagram'],['xhs','小红书']].map(([f,l])=>(
-                  <button key={f} className={`filter-tab${histFilter===f?' active'+(f==='ig'?'-ig':f==='xhs'?'-xhs':''):''}`} onClick={()=>setHistFilter(f)}>{l}</button>
+                  <button key={f} className={`filter-tab${histFilter===f?(' active'+(f==='ig'?'-ig':f==='xhs'?'-xhs':'')):''}`} onClick={()=>setHistFilter(f)}>{l}</button>
                 ))}
               </div>
               <div className="history-list">
@@ -398,7 +388,6 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* ACCOUNTS */}
           {page === 'accounts' && (
             <>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
@@ -432,7 +421,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* POST MODAL */}
       <div className={`modal-bg${postModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setPostModal(false)}>
         <div className="modal">
           <h3>{editId ? '编辑草稿' : '新建草稿'}</h3>
@@ -513,7 +501,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* DETAIL MODAL */}
       <div className={`modal-bg${detailModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setDetailModal(false)}>
         {detailPost && <div className="modal">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1.25rem',gap:'8px'}}>
@@ -538,7 +525,6 @@ export default function Dashboard() {
         </div>}
       </div>
 
-      {/* ACCOUNT MODAL */}
       <div className={`modal-bg${accModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setAccModal(false)}>
         <div className="modal" style={{maxWidth:'420px'}}>
           <h3>{editAccId?'编辑账号':'添加账号'}</h3>
@@ -555,7 +541,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* TELEGRAM MODAL */}
       <div className={`modal-bg${tgModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setTgModal(false)}>
         <div className="modal" style={{maxWidth:'460px'}}>
           <h3><i className="ti ti-brand-telegram" style={{color:'var(--tg)'}}></i> Telegram 提醒设置</h3>
@@ -579,7 +564,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* TOAST */}
       <div className={`toast${toastMsg?' show':''}`}>{toastMsg}</div>
     </div>
   )
