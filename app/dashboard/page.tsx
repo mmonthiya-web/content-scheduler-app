@@ -58,7 +58,7 @@ export default function Dashboard() {
 const [darkMode, setDarkMode] = useState<boolean>(() => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('darkMode')
-    return saved ? saved === 'true' : window.matchMedia('(prefers-color-scheme: dark)').matches
+    return saved ? saved === 'true' : false
   }
   return false
 })
