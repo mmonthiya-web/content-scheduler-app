@@ -237,10 +237,11 @@ export default function Dashboard() {
         <div key={d} className={`cal-day${isToday?' today':''}`}>
           <div className="cal-num">{d}</div>
           {dayPosts.map(p => (
-            <div key={p.id} className={`cal-chip ${p.platforms.length>1?'both':p.platforms[0]}`}
-              onClick={()=>{ setDetailPost(p); setDetailModal(true) }}>
-              {p.emoji} {p.title}
-            </div>
+          <div key={p.id} className={`cal-chip ${p.platforms.length>1?'both':p.platforms[0]}`}
+  onClick={()=>{ setDetailPost(p); setDetailModal(true) }}>
+  {p.emoji} {p.title}
+  {p.account_ids?.length > 0 && <span style={{opacity:0.7,fontSize:'9px',display:'block'}}>{p.account_ids.map((id: string)=>accounts.find(a=>a.id===id)?.name).filter(Boolean).join(', ')}</span>}
+</div>
           ))}
         </div>
       )
