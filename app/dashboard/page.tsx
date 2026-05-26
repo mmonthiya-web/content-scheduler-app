@@ -312,7 +312,7 @@ useEffect(() => {
             <>
               <div className="stat-grid">
                 <div className="stat-card accent"><div className="stat-label">草稿总数</div><div className="stat-value">{posts.length}</div><div className="stat-sub">{posts.filter(p=>p.status==='scheduled').length} 已排期</div></div>
-                <div className="stat-card"><div className="stat-label">未发布草稿</div><div className="stat-value">{posts.filter(p=>p.status==='draft').length}</div><div className="stat-sub">待排期</div></div>
+                <div className="stat-card"><div className="stat-label">待排期</div><div className="stat-value">{posts.filter(p=>p.status==='draft').length}</div><div className="stat-sub">未设时间</div></div>
                 <div className="stat-card"><div className="stat-label">Instagram</div><div className="stat-value">{posts.filter(p=>p.platforms.includes('ig')).length}</div><div className="stat-sub">篇内容</div></div>
                 <div className="stat-card"><div className="stat-label">小红书</div><div className="stat-value">{posts.filter(p=>p.platforms.includes('xhs')).length}</div><div className="stat-sub">篇内容</div></div>
               </div>
