@@ -8,14 +8,17 @@ type Status = 'draft' | 'scheduled' | 'published'
 
 interface Post {
   id: string; emoji: string; img_url: string; title: string; copy: string;
-  tags: string; platforms: Platform[]; account_ids: string[]; scheduled_at: string | null;
-  status: Status; reminder: boolean; user_id: string; created_at: string;
+  tags: string; platforms: Platform[]; account_ids: string[]; category_ids: string[];
+  scheduled_at: string | null; status: Status; reminder: boolean; user_id: string; created_at: string;
 }
 interface Account {
   id: string; platform: Platform; name: string; handle: string; user_id: string;
 }
+interface Category {
+  id: string; name: string; color: string; user_id: string;
+}
 
-const EMOJIS = ['📸','🌟','💫','🎨','🖼️','🌈','🍀','🔥','✨','🎯']
+const CATEGORY_COLORS = ['#E74C3C','#E67E22','#F1C40F','#2ECC71','#1ABC9C','#3498DB','#9B59B6','#E91E63','#FF5722','#607D8B']
 const XHS_MAX = 1000, IG_MAX = 2200
 
 export default function Dashboard() {
@@ -25,60 +28,73 @@ export default function Dashboard() {
   const [userEmail, setUserEmail] = useState<string>('')
   const [posts, setPosts] = useState<Post[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState<'drafts'|'calendar'|'history'|'accounts'>('drafts')
+  const [page, setPage] = useState<'drafts'|'calendar'|'history'|'accounts'|'categories'>('drafts')
   const [draftFilter, setDraftFilter] = useState('all')
+  const [catFilter, setCatFilter] = useState('all')
   const [histFilter, setHistFilter] = useState('all')
   const [calMonth, setCalMonth] = useState(new Date())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [toastMsg, setToastMsg] = useState('')
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode')
+      return saved ? saved === 'true' : false
+    }
+    return false
+  })
   const [postModal, setPostModal] = useState(false)
   const [editId, setEditId] = useState<string|null>(null)
   const [detailModal, setDetailModal] = useState(false)
   const [detailPost, setDetailPost] = useState<Post|null>(null)
   const [accModal, setAccModal] = useState(false)
   const [editAccId, setEditAccId] = useState<string|null>(null)
+  const [catModal, setCatModal] = useState(false)
+  const [editCatId, setEditCatId] = useState<string|null>(null)
   const [tgModal, setTgModal] = useState(false)
   const [tgToken, setTgToken] = useState('')
   const [tgChatId, setTgChatId] = useState('')
   const [tgResult, setTgResult] = useState('')
+  // Post form
   const [fTitle, setFTitle] = useState('')
   const [fCopy, setFCopy] = useState('')
   const [fTags, setFTags] = useState('')
   const [fPlatforms, setFPlatforms] = useState<Platform[]>([])
   const [fAccounts, setFAccounts] = useState<string[]>([])
+  const [fCategories, setFCategories] = useState<string[]>([])
   const [fDate, setFDate] = useState('')
   const [fHour, setFHour] = useState('')
   const [fMin, setFMin] = useState('00')
   const [fReminder, setFReminder] = useState(false)
   const [fImg, setFImg] = useState<string>('')
+  // Account form
   const [aPlatform, setAPlatform] = useState<Platform>('ig')
   const [aName, setAName] = useState('')
   const [aHandle, setAHandle] = useState('')
-const [darkMode, setDarkMode] = useState<boolean>(() => {
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('darkMode')
-    return saved ? saved === 'true' : false
-  }
-  return false
-})
+  // Category form
+  const [cName, setCName] = useState('')
+  const [cColor, setCColor] = useState(CATEGORY_COLORS[0])
 
-useEffect(() => {
-  document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
-  localStorage.setItem('darkMode', String(darkMode))
-}, [darkMode])
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
+    localStorage.setItem('darkMode', String(darkMode))
+  }, [darkMode])
+
   const toast = (msg: string) => {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(''), 2200)
   }
 
   const loadData = useCallback(async (uid: string) => {
-    const [{ data: p }, { data: a }] = await Promise.all([
+    const [{ data: p }, { data: a }, { data: c }] = await Promise.all([
       supabase.from('posts').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
       supabase.from('accounts').select('*').eq('user_id', uid).order('created_at', { ascending: true }),
+      supabase.from('categories').select('*').eq('user_id', uid).order('created_at', { ascending: true }),
     ])
     if (p) setPosts(p)
     if (a) setAccounts(a)
+    if (c) setCategories(c)
     const saved = localStorage.getItem(`tg_${uid}`)
     if (saved) { const t = JSON.parse(saved); setTgToken(t.token||''); setTgChatId(t.chatId||'') }
     setLoading(false)
@@ -106,13 +122,14 @@ useEffect(() => {
     return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
+  // ---- POSTS ----
   const openPostModal = (id?: string) => {
     setEditId(id || null)
     if (id) {
       const p = posts.find(x => x.id === id)!
       setFTitle(p.title); setFCopy(p.copy); setFTags(p.tags)
       setFPlatforms(p.platforms); setFAccounts(p.account_ids||[])
-      setFReminder(p.reminder); setFImg(p.img_url||'')
+      setFCategories(p.category_ids||[]); setFReminder(p.reminder); setFImg(p.img_url||'')
       if (p.scheduled_at) {
         const d = new Date(p.scheduled_at)
         setFDate(d.toISOString().split('T')[0])
@@ -121,7 +138,7 @@ useEffect(() => {
       } else { setFDate(''); setFHour(''); setFMin('00') }
     } else {
       setFTitle(''); setFCopy(''); setFTags(''); setFPlatforms([]); setFAccounts([])
-      setFDate(''); setFHour(''); setFMin('00'); setFReminder(false); setFImg('')
+      setFCategories([]); setFDate(''); setFHour(''); setFMin('00'); setFReminder(false); setFImg('')
     }
     setPostModal(true)
   }
@@ -131,9 +148,8 @@ useEffect(() => {
     if (!session) { toast('请重新登录'); return }
     const scheduled_at = fDate && fHour ? `${fDate}T${fHour}:${fMin}:00` : null
     const data = {
-      emoji: EMOJIS[Math.floor(Math.random()*EMOJIS.length)],
-      img_url: fImg, title: fTitle||'无标题草稿', copy: fCopy, tags: fTags,
-      platforms: fPlatforms, account_ids: fAccounts,
+      emoji: '📸', img_url: fImg, title: fTitle||'无标题草稿', copy: fCopy, tags: fTags,
+      platforms: fPlatforms, account_ids: fAccounts, category_ids: fCategories,
       scheduled_at, status: (scheduled_at ? 'scheduled' : 'draft') as Status,
       reminder: fReminder, user_id: session.user.id,
     }
@@ -165,6 +181,7 @@ useEffect(() => {
     reader.readAsDataURL(file)
   }
 
+  // ---- ACCOUNTS ----
   const openAccModal = (id?: string) => {
     setEditAccId(id || null)
     if (id) {
@@ -198,6 +215,42 @@ useEffect(() => {
     toast('已删除'); await loadData(session.user.id); setAccModal(false)
   }
 
+  // ---- CATEGORIES ----
+  const openCatModal = (id?: string) => {
+    setEditCatId(id || null)
+    if (id) {
+      const c = categories.find(x => x.id === id)!
+      setCName(c.name); setCColor(c.color)
+    } else { setCName(''); setCColor(CATEGORY_COLORS[0]) }
+    setCatModal(true)
+  }
+
+  const saveCat = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { toast('请重新登录'); return }
+    if (!cName.trim()) { toast('请输入分类名称'); return }
+    const data = { name: cName.trim(), color: cColor, user_id: session.user.id }
+    if (editCatId) {
+      const { error } = await supabase.from('categories').update(data).eq('id', editCatId)
+      if (error) { toast('错误: ' + error.message); return }
+      toast('分类已更新 ✓')
+    } else {
+      const { error } = await supabase.from('categories').insert(data)
+      if (error) { toast('错误: ' + error.message); return }
+      toast('分类已创建 ✓')
+    }
+    await loadData(session.user.id); setCatModal(false)
+  }
+
+  const deleteCat = async () => {
+    if (!confirm('确定删除此分类？')) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await supabase.from('categories').delete().eq('id', editCatId!)
+    toast('已删除'); await loadData(session.user.id); setCatModal(false)
+  }
+
+  // ---- TELEGRAM ----
   const saveTg = () => {
     if (!userId) return
     localStorage.setItem(`tg_${userId}`, JSON.stringify({ token: tgToken, chatId: tgChatId }))
@@ -215,12 +268,11 @@ useEffect(() => {
     } catch { setTgResult('✗ 发送失败') }
   }
 
+  // ---- FILTERS ----
   const filteredPosts = posts.filter(p => {
-    if (draftFilter === 'draft') return p.status === 'draft'
-    if (draftFilter === 'scheduled') return p.status === 'scheduled'
-    if (draftFilter === 'ig') return p.platforms.includes('ig')
-    if (draftFilter === 'xhs') return p.platforms.includes('xhs')
-    return true
+    const statusOk = draftFilter === 'all' ? true : draftFilter === 'draft' ? p.status === 'draft' : draftFilter === 'scheduled' ? p.status === 'scheduled' : draftFilter === 'ig' ? p.platforms.includes('ig') : draftFilter === 'xhs' ? p.platforms.includes('xhs') : true
+    const catOk = catFilter === 'all' ? true : (p.category_ids||[]).includes(catFilter)
+    return statusOk && catOk
   })
 
   const filteredHistory = posts.filter(p => {
@@ -231,6 +283,7 @@ useEffect(() => {
     return true
   }).sort((a,b) => new Date(b.scheduled_at||b.created_at).getTime() - new Date(a.scheduled_at||a.created_at).getTime())
 
+  // ---- CALENDAR ----
   const calYear = calMonth.getFullYear(), calMon = calMonth.getMonth()
   const scheduledPosts = posts.filter(p => p.scheduled_at && p.status === 'scheduled')
   const calDays = () => {
@@ -248,11 +301,11 @@ useEffect(() => {
         <div key={d} className={`cal-day${isToday?' today':''}`}>
           <div className="cal-num">{d}</div>
           {dayPosts.map(p => (
-          <div key={p.id} className={`cal-chip ${p.platforms.length>1?'both':p.platforms[0]}`}
-  onClick={()=>{ setDetailPost(p); setDetailModal(true) }}>
-  {p.emoji} {p.title}
-  {p.account_ids?.length > 0 && <span style={{opacity:0.7,fontSize:'9px',display:'block'}}>{p.account_ids.map((id: string)=>accounts.find(a=>a.id===id)?.name).filter(Boolean).join(', ')}</span>}
-</div>
+            <div key={p.id} className={`cal-chip ${p.platforms.length>1?'both':p.platforms[0]}`}
+              onClick={()=>{ setDetailPost(p); setDetailModal(true) }}>
+              {p.title}
+              {(p.account_ids||[]).length > 0 && <span style={{opacity:0.7,fontSize:'9px',display:'block'}}>{p.account_ids.map((id: string)=>accounts.find(a=>a.id===id)?.name).filter(Boolean).join(', ')}</span>}
+            </div>
           ))}
         </div>
       )
@@ -272,7 +325,7 @@ useEffect(() => {
 
   if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',color:'var(--text3)'}}>加载中…</div>
 
-  const pageTitle = {drafts:'草稿库',calendar:'排期日历',history:'发布记录',accounts:'账号管理'}[page]
+  const pageTitle = {drafts:'草稿库',calendar:'排期日历',history:'发布记录',accounts:'账号管理',categories:'分类管理'}[page]
 
   return (
     <div className="app-shell">
@@ -285,11 +338,12 @@ useEffect(() => {
         <button className={`nav-item${page==='calendar'?' active':''}`} onClick={()=>{setPage('calendar');setSidebarOpen(false)}}><i className="ti ti-calendar"></i> 排期日历</button>
         <button className={`nav-item${page==='history'?' active':''}`} onClick={()=>{setPage('history');setSidebarOpen(false)}}><i className="ti ti-clock-hour-4"></i> 发布记录</button>
         <div className="nav-section">设置</div>
+        <button className={`nav-item${page==='categories'?' active':''}`} onClick={()=>{setPage('categories');setSidebarOpen(false)}}><i className="ti ti-tag"></i> 分类管理</button>
         <button className={`nav-item${page==='accounts'?' active':''}`} onClick={()=>{setPage('accounts');setSidebarOpen(false)}}><i className="ti ti-users"></i> 账号管理</button>
         <button className="nav-item" onClick={()=>{setTgResult('');setTgModal(true);setSidebarOpen(false)}}><i className="ti ti-brand-telegram"></i> Telegram 提醒</button>
         <div className="sidebar-bottom">
           <div style={{fontSize:'11px',color:'var(--text3)',marginBottom:'6px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{userEmail}</div>
-         <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center',marginBottom:'6px'}} onClick={()=>setDarkMode(!darkMode)}><i className={`ti ti-${darkMode?'sun':'moon'}`}></i> {darkMode?'日间模式':'夜间模式'}</button>
+          <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center',marginBottom:'6px'}} onClick={()=>setDarkMode(!darkMode)}><i className={`ti ti-${darkMode?'sun':'moon'}`}></i> {darkMode?'日间模式':'夜间模式'}</button>
           <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={signOut}><i className="ti ti-logout"></i> 登出</button>
         </div>
       </nav>
@@ -303,11 +357,13 @@ useEffect(() => {
             <span className="topbar-title">{pageTitle}</span>
           </div>
           <div className="topbar-actions">
-            <button className="btn btn-primary btn-sm" onClick={()=>openPostModal()}><i className="ti ti-plus"></i> <span>新建</span></button>
+            <button className="btn btn-primary btn-sm" onClick={()=>page==='categories'?openCatModal():page==='accounts'?openAccModal():openPostModal()}><i className="ti ti-plus"></i> <span>新建</span></button>
           </div>
         </div>
 
         <div className="content">
+
+          {/* DRAFTS */}
           {page === 'drafts' && (
             <>
               <div className="stat-grid">
@@ -321,6 +377,18 @@ useEffect(() => {
                   <button key={f} className={`filter-tab${draftFilter===f?(' active'+(f==='ig'?'-ig':f==='xhs'?'-xhs':'')):''}`} onClick={()=>setDraftFilter(f)}>{l}</button>
                 ))}
               </div>
+              {categories.length > 0 && (
+                <div className="filter-tabs" style={{marginTop:'-0.75rem'}}>
+                  <button className={`filter-tab${catFilter==='all'?' active':''}`} onClick={()=>setCatFilter('all')}>所有分类</button>
+                  {categories.map(c => (
+                    <button key={c.id} className={`filter-tab${catFilter===c.id?' active':''}`}
+                      style={catFilter===c.id?{background:c.color,borderColor:'transparent',color:'#fff'}:{borderColor:c.color,color:c.color}}
+                      onClick={()=>setCatFilter(catFilter===c.id?'all':c.id)}>
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="draft-grid">
                 {filteredPosts.map(p => (
                   <div key={p.id} className="draft-card" onClick={()=>{setDetailPost(p);setDetailModal(true)}}>
@@ -330,6 +398,14 @@ useEffect(() => {
                         {p.platforms.includes('ig') && <span className="tag tag-ig" style={{fontSize:'9px',padding:'1px 5px'}}>IG</span>}
                         {p.platforms.includes('xhs') && <span className="tag tag-xhs" style={{fontSize:'9px',padding:'1px 5px'}}>XHS</span>}
                       </div>
+                      {(p.category_ids||[]).length > 0 && (
+                        <div style={{position:'absolute',top:'6px',left:'6px',display:'flex',gap:'3px',flexWrap:'wrap'}}>
+                          {(p.category_ids||[]).slice(0,2).map((cid:string) => {
+                            const cat = categories.find(c=>c.id===cid)
+                            return cat ? <span key={cid} style={{background:cat.color,color:'#fff',fontSize:'9px',padding:'1px 6px',borderRadius:'99px',fontWeight:500}}>{cat.name}</span> : null
+                          })}
+                        </div>
+                      )}
                     </div>
                     <div className="card-actions" onClick={e=>e.stopPropagation()}>
                       <button className="btn-icon" onClick={()=>openPostModal(p.id)}><i className="ti ti-edit"></i></button>
@@ -353,6 +429,7 @@ useEffect(() => {
             </>
           )}
 
+          {/* CALENDAR */}
           {page === 'calendar' && (
             <>
               <div className="stat-grid">
@@ -372,6 +449,7 @@ useEffect(() => {
             </>
           )}
 
+          {/* HISTORY */}
           {page === 'history' && (
             <>
               <div className="filter-tabs">
@@ -383,11 +461,12 @@ useEffect(() => {
                 {filteredHistory.length === 0 && <div className="empty">暂无记录</div>}
                 {filteredHistory.map(p => (
                   <div key={p.id} className="hist-item" onClick={()=>{setDetailPost(p);setDetailModal(true)}}>
-                    <div className="hist-thumb">{p.img_url?<img src={p.img_url} alt=""/>:p.emoji}</div>
+                    <div className="hist-thumb">{p.img_url?<img src={p.img_url} alt=""/>:<span style={{fontSize:'12px',color:'var(--text3)',padding:'4px',textAlign:'center',lineHeight:1.3}}>{p.title.slice(0,8)}</span>}</div>
                     <div className="hist-info">
                       <div className="hist-title">{p.title}</div>
                       <div className="hist-meta">
                         {p.platforms.map(pl=><span key={pl} className={`tag tag-${pl}`}>{pl==='ig'?'Instagram':'小红书'}</span>)}
+                        {(p.category_ids||[]).map((cid:string)=>{const cat=categories.find(c=>c.id===cid);return cat?<span key={cid} style={{background:cat.color,color:'#fff',fontSize:'10px',padding:'1px 6px',borderRadius:'99px'}}>{cat.name}</span>:null})}
                         <span>{fmtTime(p.scheduled_at||p.created_at)}</span>
                       </div>
                     </div>
@@ -401,6 +480,35 @@ useEffect(() => {
             </>
           )}
 
+          {/* CATEGORIES */}
+          {page === 'categories' && (
+            <>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
+                <div>
+                  <div style={{fontSize:'15px',fontWeight:600,marginBottom:'2px'}}>分类管理</div>
+                  <div style={{fontSize:'12px',color:'var(--text3)'}}>创建分类来整理你的内容</div>
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={()=>openCatModal()}><i className="ti ti-plus"></i> 新建分类</button>
+              </div>
+              {categories.length === 0 && <div className="empty">还没有分类，点右上角新建一个吧</div>}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:'10px'}}>
+                {categories.map(c => (
+                  <div key={c.id} onClick={()=>openCatModal(c.id)} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'1rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'10px',transition:'border-color 0.15s'}}
+                    onMouseEnter={e=>(e.currentTarget.style.borderColor='var(--border2)')}
+                    onMouseLeave={e=>(e.currentTarget.style.borderColor='var(--border)')}>
+                    <div style={{width:'36px',height:'36px',borderRadius:'50%',background:c.color,flexShrink:0}}></div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:'13px',fontWeight:500,color:'var(--text)'}}>{c.name}</div>
+                      <div style={{fontSize:'11px',color:'var(--text3)',marginTop:'2px'}}>{posts.filter(p=>(p.category_ids||[]).includes(c.id)).length} 篇内容</div>
+                    </div>
+                    <i className="ti ti-chevron-right" style={{color:'var(--text3)',fontSize:'14px'}}></i>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ACCOUNTS */}
           {page === 'accounts' && (
             <>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
@@ -419,9 +527,6 @@ useEffect(() => {
                       <div className="acc-handle">{a.handle}</div>
                       <div className="acc-platform" style={{color:a.platform==='ig'?'var(--ig-text)':'var(--xhs-text)'}}>{a.platform==='ig'?'Instagram':'小红书'}</div>
                     </div>
-                    <div className="acc-actions" onClick={e=>e.stopPropagation()}>
-                      <button className="btn-icon" onClick={()=>openAccModal(a.id)}><i className="ti ti-edit"></i></button>
-                    </div>
                   </div>
                 ))}
                 <div className="acc-card add-acc" onClick={()=>openAccModal()}>
@@ -434,6 +539,7 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* POST MODAL */}
       <div className={`modal-bg${postModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setPostModal(false)}>
         <div className="modal">
           <h3>{editId ? '编辑草稿' : '新建草稿'}</h3>
@@ -460,6 +566,21 @@ useEffect(() => {
             </div>
           </div>
           <div className="field"><label>标签</label><input type="text" value={fTags} onChange={e=>setFTags(e.target.value)} placeholder="#标签1 #标签2" /></div>
+          {categories.length > 0 && (
+            <div className="field">
+              <label>分类</label>
+              <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                {categories.map(c => (
+                  <button key={c.id} onClick={()=>setFCategories(prev=>prev.includes(c.id)?prev.filter(x=>x!==c.id):[...prev,c.id])}
+                    style={{padding:'5px 12px',borderRadius:'99px',border:`1px solid ${c.color}`,fontSize:'12px',cursor:'pointer',fontFamily:'inherit',transition:'all 0.15s',
+                      background:fCategories.includes(c.id)?c.color:'transparent',
+                      color:fCategories.includes(c.id)?'#fff':c.color}}>
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="field">
             <label>发布平台</label>
             <div className="platform-row">
@@ -501,7 +622,6 @@ useEffect(() => {
                 <span style={{fontSize:'13px',display:'flex',alignItems:'center',gap:'8px'}}><i className="ti ti-brand-telegram" style={{color:'var(--tg)',fontSize:'17px'}}></i> 发布前 30 分钟 Telegram 提醒</span>
                 <button className={`toggle${fReminder?' on':''}`} onClick={()=>setFReminder(!fReminder)}></button>
               </div>
-              {fReminder && !tgToken && <div style={{fontSize:'11px',color:'var(--warn)',marginTop:'5px',paddingLeft:'4px'}}><i className="ti ti-alert-triangle"></i> 请先在侧栏设置 Telegram Bot</div>}
             </div>
           )}
           <div className="modal-footer">
@@ -514,16 +634,22 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* DETAIL MODAL */}
       <div className={`modal-bg${detailModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setDetailModal(false)}>
         {detailPost && <div className="modal">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1.25rem',gap:'8px'}}>
             <h3 style={{margin:0,flex:1}}>{detailPost.title}</h3>
             <span className={`tag tag-${detailPost.status}`}>{detailPost.status==='published'?'已发布':detailPost.status==='scheduled'?'待发布':'草稿'}</span>
           </div>
-          <div className="detail-img">{detailPost.img_url?<img src={detailPost.img_url} alt=""/>:<span style={{fontSize:'56px'}}>{detailPost.emoji}</span>}</div>
+          <div className="detail-img">{detailPost.img_url?<img src={detailPost.img_url} alt=""/>:<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}><span style={{fontSize:'15px',fontWeight:500,color:'var(--text3)',textAlign:'center',lineHeight:1.5}}>{detailPost.title}</span></div>}</div>
           <div className="detail-copy">{detailPost.copy||'（暂无文案）'}</div>
           <div>
             <div className="detail-row">{detailPost.platforms.map(pl=><span key={pl} className={`tag tag-${pl}`}>{pl==='ig'?'Instagram':'小红书'}</span>)}</div>
+            {(detailPost.category_ids||[]).length > 0 && (
+              <div className="detail-row">
+                {(detailPost.category_ids||[]).map((cid:string)=>{const cat=categories.find(c=>c.id===cid);return cat?<span key={cid} style={{background:cat.color,color:'#fff',fontSize:'11px',padding:'2px 8px',borderRadius:'99px'}}>{cat.name}</span>:null})}
+              </div>
+            )}
             {detailPost.tags && <div className="detail-row"><i className="ti ti-hash" style={{fontSize:'14px'}}></i> {detailPost.tags}</div>}
             {detailPost.scheduled_at && <div className="detail-row"><i className="ti ti-clock" style={{fontSize:'14px'}}></i> {detailPost.status==='published'?'发布于':'定时：'} {fmtTime(detailPost.scheduled_at)}</div>}
             {detailPost.reminder && detailPost.scheduled_at && <div className="detail-row" style={{color:'var(--tg)'}}><i className="ti ti-brand-telegram" style={{fontSize:'14px'}}></i> Telegram 提醒已开启</div>}
@@ -538,6 +664,34 @@ useEffect(() => {
         </div>}
       </div>
 
+      {/* CATEGORY MODAL */}
+      <div className={`modal-bg${catModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setCatModal(false)}>
+        <div className="modal" style={{maxWidth:'400px'}}>
+          <h3>{editCatId?'编辑分类':'新建分类'}</h3>
+          <div className="field"><label>分类名称</label><input type="text" value={cName} onChange={e=>setCName(e.target.value)} placeholder="eg. 好物分享、科普、经验…" /></div>
+          <div className="field">
+            <label>颜色</label>
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+              {CATEGORY_COLORS.map(col => (
+                <button key={col} onClick={()=>setCColor(col)} style={{width:'32px',height:'32px',borderRadius:'50%',background:col,border:cColor===col?'3px solid var(--text)':'3px solid transparent',cursor:'pointer',transition:'border 0.15s'}}></button>
+              ))}
+            </div>
+          </div>
+          <div style={{marginTop:'4px',padding:'10px 14px',background:'var(--bg2)',borderRadius:'var(--radius)',display:'flex',alignItems:'center',gap:'8px'}}>
+            <span style={{background:cColor,color:'#fff',fontSize:'12px',padding:'3px 10px',borderRadius:'99px',fontWeight:500}}>{cName||'预览'}</span>
+            <span style={{fontSize:'12px',color:'var(--text3)'}}>← 分类标签预览</span>
+          </div>
+          <div className="modal-footer">
+            <div>{editCatId && <button className="btn btn-danger btn-sm" onClick={deleteCat}><i className="ti ti-trash"></i> 删除</button>}</div>
+            <div className="modal-footer-right">
+              <button className="btn btn-ghost" onClick={()=>setCatModal(false)}>取消</button>
+              <button className="btn btn-primary" onClick={saveCat}>保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ACCOUNT MODAL */}
       <div className={`modal-bg${accModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setAccModal(false)}>
         <div className="modal" style={{maxWidth:'420px'}}>
           <h3>{editAccId?'编辑账号':'添加账号'}</h3>
@@ -554,6 +708,7 @@ useEffect(() => {
         </div>
       </div>
 
+      {/* TELEGRAM MODAL */}
       <div className={`modal-bg${tgModal?' open':''}`} onClick={e=>e.target===e.currentTarget&&setTgModal(false)}>
         <div className="modal" style={{maxWidth:'460px'}}>
           <h3><i className="ti ti-brand-telegram" style={{color:'var(--tg)'}}></i> Telegram 提醒设置</h3>
