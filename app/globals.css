@@ -62,7 +62,7 @@ input,textarea,select{font-family:'DM Sans',sans-serif;}
 .field label{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;}
 .field input,.field textarea,.field select{width:100%;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;padding:9px 12px;transition:border-color .15s;}
 .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent);}
-.field textarea{resize:vertical;min-height:90px;line-height:1.6;}
+.field textarea{resize:vertical;min-height:200px;line-height:1.6;}
 .modal-footer{display:flex;justify-content:space-between;align-items:center;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);}
 .modal-footer-right{display:flex;gap:8px;}
 .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 20px;border-radius:var(--radius);font-size:13px;z-index:999;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;box-shadow:var(--shadow-md);}
