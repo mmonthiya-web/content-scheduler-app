@@ -325,7 +325,7 @@ useEffect(() => {
                 {filteredPosts.map(p => (
                   <div key={p.id} className="draft-card" onClick={()=>{setDetailPost(p);setDetailModal(true)}}>
                     <div className="draft-thumb">
-                      {p.img_url ? <img src={p.img_url} alt="" /> : <span>{p.emoji}</span>}
+                      {p.img_url ? <img src={p.img_url} alt="" /> : <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:'12px'}}><span style={{fontSize:'13px',fontWeight:500,color:'var(--text3)',textAlign:'center',lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical'}}>{p.title}</span></div>}
                       <div className="draft-thumb-acc">
                         {p.platforms.includes('ig') && <span className="tag tag-ig" style={{fontSize:'9px',padding:'1px 5px'}}>IG</span>}
                         {p.platforms.includes('xhs') && <span className="tag tag-xhs" style={{fontSize:'9px',padding:'1px 5px'}}>XHS</span>}
